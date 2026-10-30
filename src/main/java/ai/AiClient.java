@@ -1,70 +1,131 @@
 package ai;
 
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.*;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.cloud.vertexai.generativeai.ResponseHandler;
+import model.CardSuit;
+import model.CardValue;
 
+import java.io.FileInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.List;
 
 public class AiClient implements AutoCloseable {
+    private static final String SYSTEM_INSTRUCTION = """
+            You are an expert, Grandmaster-level player in the Persian card game Hokm.
+            === CORE RULES & RANKING ===
+            1. LEGAL MOVES: You MUST choose a card from the provided VALID MOVES list (following the lead suit whenever possible).
+            2. CARD RANKING (High to Low): ACE, KING, QUEEN, JACK, TEN, NINE, EIGHT, SEVEN, SIX, FIVE, FOUR, THREE, TWO.
+            3. ALLIANCE: Never cut or try to beat a trick when the prompt indicates YOUR PARTNER is currently winning, except as noted in Rule 2 below.
+
+            === GRANDMASTER TURN STRATEGIES ===
+            1. THE PARTNER PASS (FINESSING): When leading a trick holding a King or Queen, check the Threat Board. If higher cards (like the Ace) are still outside your hand, DO NOT lead your King/Queen. Lead a LOW card of that suit to force out the opponents' Ace or let your partner win it.
+            2. PARTNER WINNING EXCEPTION: If your partner is currently winning and you must follow a non-Hokm lead suit, check if you hold the ACE of that led suit. If you do, play the ACE to secure the guaranteed trick, maintain suit control, and prevent the suit from being cut by a Hokm on a later trick. Otherwise, play your lowest valid card.
+            3. EXHAUSTION AVOIDANCE: If the Threat Board shows "WARNING: Suit exhausted!" for a non-Hokm suit, avoid leading it unless you want to force opponents to spend Hokms or know your partner is void and can cut it.
+            4. PARTNER FEEDING: Check "Known Player Voids". If your partner is void in a non-Hokm suit, lead a low card of that suit so your partner can cut it with a Hokm.
+            5. OPPONENT STARVATION: Never lead a non-Hokm suit in which an opponent is known to be void.
+            6. HOKM CONSERVATION & DEFENSE: Do not play a Hokm unless cutting an opponent's winning card, pulling trumps as the Hakem team, or leading an unbeatable Hokm. If you are the defending team, save your high Hokms to cut the Hakem's off-suit winners.
+            7. OVER-CUT VALUATION: If an opponent has already cut a trick with a low Hokm, do NOT over-cut them with a premium Hokm (Ace, King, Queen) unless it is the decisive final tricks of the round (e.g., either team has 5 or 6 tricks). Discard a low off-suit card instead.
+
+            === HOKM (TRUMP) SELECTION STRATEGIES (WHEN HAKEM) ===
+            1. QUANTITY OVER LONE ACES: Prioritize the suit with the highest card count in your first 5 cards.
+            2. PRESERVE OFF-SUIT ACES: Do not pick a suit solely because you hold a lone Ace; a non-Hokm Ace is already a guaranteed external trick. Build trumps from multi-card suits.
+            """;
+
     private final VertexAI vertexAI;
     private final GenerativeModel model;
 
     public AiClient(String projectId, String location, String modelName) {
-        this.vertexAI = new VertexAI(projectId, location);
-
-        Schema cardSchema = Schema.newBuilder()
-                .setType(Type.OBJECT)
-//                .putProperties("reasoning", Schema.newBuilder().setType(Type.STRING).build())
-                .putProperties("suit", Schema.newBuilder()
-                        .setType(Type.STRING)
-                        .addAllEnum(Arrays.asList("HEARTS", "DIAMONDS", "CLUBS", "SPADES"))
-                        .build())
-                .putProperties("value", Schema.newBuilder().setType(Type.STRING)
-                        .addAllEnum(Arrays.asList("TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "JACK", "QUEEN", "KING", "ACE"))
-                        .build())
-                .addRequired("suit").addRequired("value")
+        this.vertexAI = new VertexAI.Builder()
+                .setProjectId(projectId)
+                .setLocation(location)
+                .setCredentials(loadCredentials())
                 .build();
 
-        GenerationConfig speedConfig = GenerationConfig.newBuilder()
+        List<String> suits = Arrays.stream(CardSuit.values()).map(Enum::name).toList();
+        List<String> values = Arrays.stream(CardValue.values()).map(Enum::name).toList();
+
+        Schema responseSchema = Schema.newBuilder()
+                .setType(Type.OBJECT)
+                .putProperties("suit", Schema.newBuilder()
+                        .setType(Type.STRING)
+                        .addAllEnum(suits)
+                        .build())
+                .putProperties("value", Schema.newBuilder().setType(Type.STRING)
+                        .addAllEnum(values)
+                        .build())
+                .addRequired("suit")
+                .build();
+
+        GenerationConfig generationConfig = GenerationConfig.newBuilder()
                 .setTemperature(0.2f)
                 .setResponseMimeType("application/json")
-                .setResponseSchema(cardSchema)
+                .setResponseSchema(responseSchema)
                 .build();
 
         Content systemInstruction = Content.newBuilder()
-                .addParts(Part.newBuilder().setText(
-                        "You are an expert, Grandmaster-level player in the Persian card game Hokm.\n" +
-                                "STRATEGY RULES:\n" +
-                                "1. RULE: You MUST follow the lead suit if you have it in your hand.\n" +
-                                "2. TEAM RECOGNITION: Pay strict attention to the Team names on the table. If you are on Team 1, your partner is the other Team 1 player. Team 2 players are your opponents. Do not cut or try to beat your own partner's winning card.\n" +
-                                "3. PARTNER PLAY: If you are the 3rd or 4th player to act, evaluate if your partner is already winning the trick. If your partner is winning, play your LOWEST valid card to save your high cards.\n" +
-                                "4. OPPONENT PLAY: If the opponents are winning the trick, try to beat their highest card by playing a higher card of the lead suit, or by cutting with a Hokm if you are void in the lead suit.\n" +
-                                "5. LEADING: If you are leading the trick, play your highest non-Hokm card (like an Ace) if they haven't been played yet, or pull trumps if you hold the highest remaining Hokms." +
-                                "Be careful to not lose King cards when you are not sure who holds the Aces unless you have the following ranks in your hand. It is really important to realized what cards your partner hold so you play that." +
-                                "For example if your partner is void with a specific non-hokm suit, you can play that particular suit and allow your partner to cut it." +
-                                "The key is that you remember what cards are left in the hands of the players and which are already played. To be the master, you should understand from your partner cards whether his or her hand is empty from a specific suit, in which case playing that suit is HIGHLY recommended.\n" +
-                                "6. CARD RANKING: The rank of cards from highest to lowest is: ACE, KING, QUEEN, JACK, 10, 9, 8, 7, 6, 5, 4, 3, 2.\n" +
-                                "7. CARD COUNTING: Look at the table and memory to know if your Kings and Queens are now the highest remaining cards in their suits.\n\n"
-                ).build())
+                .addParts(Part.newBuilder().setText(SYSTEM_INSTRUCTION).build())
                 .build();
 
         this.model = new GenerativeModel(modelName, vertexAI)
-                .withGenerationConfig(speedConfig)
+                .withGenerationConfig(generationConfig)
                 .withSystemInstruction(systemInstruction);
-//                .withTools(Collections.singletonList(buildHokmTools()));
+    }
 
+    private static GoogleCredentials loadCredentials() {
+        String envPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
+
+        if (envPath == null || envPath.isEmpty() || !Files.exists(Path.of(envPath))) {
+            Path defaultAdcPath = Paths.get(System.getProperty("user.home"),
+                    ".config", "gcloud", "application_default_credentials.json"
+            );
+
+            if (Files.exists(defaultAdcPath)) {
+                try (FileInputStream fis = new FileInputStream((defaultAdcPath.toFile()))) {
+                    GoogleCredentials creds = GoogleCredentials.fromStream(fis);
+                    creds.refreshIfExpired();
+                    System.out.println("Loaded Google Cloud credentials from default path: " + defaultAdcPath);
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to read credentials from " + defaultAdcPath, e);
+                }
+            }
+        }
+        try {
+            GoogleCredentials creds = GoogleCredentials.getApplicationDefault();
+            creds.refreshIfExpired();
+            return creds;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load Google Cloud credentials.", e);
+        }
+    }
+
+    public static void verifyCredentials() {
+        loadCredentials();
     }
 
     public String askLlm(String prompt) {
-        try {
-            GenerateContentResponse response = model.generateContent(prompt);
-            return ResponseHandler.getText(response).trim();
-        } catch (Exception e) {
-            System.err.println("⚠️ Vertex AI Network Error: " + e.getMessage());
-            return null;
+        for (int attempt = 1; attempt <=2; attempt++) {
+            try {
+                GenerateContentResponse response = model.generateContent(prompt);
+                return ResponseHandler.getText(response).trim();
+            } catch (Exception e) {
+                System.err.printf("⚠️ Vertex AI call attempt %d/2 failed: %s%n", attempt, e.getMessage());
+                if (attempt == 1) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted while waiting for retry", ie);
+                    }
+                }
+            }
         }
+        return null;
     }
 
     @Override

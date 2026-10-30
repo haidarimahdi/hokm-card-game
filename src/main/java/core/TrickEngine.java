@@ -1,123 +1,74 @@
 package core;
 
-import model.Card;
-import model.GameObserver;
-import model.GameState;
-import model.Trick;
-import player.Player;
+import model.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Responsible for orchestrating a single Trick consisting of 4 turns.
  */
 public class TrickEngine {
-
     private final List<Player> players;
-
     private final GameController gameController;
+    private final GameObserver observer;
 
-    public TrickEngine(List<Player> players, GameController gameController) {
-        this.players = players;
+    public TrickEngine(List<Player> players, GameController gameController, GameObserver observer) {
+        if (players == null || players.size() != 4) {
+            throw new IllegalArgumentException("TrickEngine requires exactly 4 players.");
+        }
+        this.players = List.copyOf(players);
         this.gameController = gameController;
+        this.observer = Objects.requireNonNull(observer, "GameObserver cannot be null");
     }
 
     public Player playTrick(GameState gameState, Player leadPlayer) {
+        Objects.requireNonNull(gameState, "GameState cannot be null");
+        Objects.requireNonNull(leadPlayer, "Lead player cannot be null");
 
-        System.out.println("\n====================================");
-        broadcast("Starting new Trick! " + leadPlayer.getName() + " is the lead!");
+        int leadPlayerIndex = players.indexOf(leadPlayer);
+        if (leadPlayerIndex == -1) {
+            throw new IllegalArgumentException("Lead player is not part of this match: " + leadPlayer.getName());
+        }
+        observer.onTrickStarted(leadPlayer, gameState.getTeam1Tricks(), gameState.getTeam2Tricks());
 
         Trick trick = new Trick();
         gameState.setCurrentTrick(trick);
 
-        int leadIndex = players.indexOf(leadPlayer);
-
-        try {
-            List<Card> playedCards = new ArrayList<>();
-            // Run the 4 turns in order
-            for (int i = 0; i < players.size(); i++) {
-                if (gameController != null && gameController.isAbortRequested()) {
-                    throw new GameAbortedException("Game aborted by user.");
-                }
-                int currentPlayerIndex = (leadIndex + i) % players.size();
-                Player currentPlayer = players.get(currentPlayerIndex);
-
-                if (!currentPlayer.getHand().contains("You")) {
-                    broadcast("⏳ " + currentPlayer.getName() + "...");
-                }
-
-                // Ask player for a card
-                Card playedCard = currentPlayer.playCard(gameState);
-
-                // Validation: Use RuleEngine to verify
-                if (!RuleEngine.isValidMove(playedCard, currentPlayer.getHand(), trick.getLeadSuit())) {
-                    System.err.println("🚨 ILLEGAL MOVE BLOCKED! " + currentPlayer.getName() + " tried to break suit with " + playedCard);
-
-                    // Fallback: Force a valid move
-                    playedCard = RuleEngine.getValidMoves(currentPlayer.getHand(), trick.getLeadSuit()).getFirst();
-                    currentPlayer.getHand().remove(playedCard);
-                    System.out.println(">> Referee forces " + currentPlayer.getName() + " to play " + playedCard);
-                } else {
-//                    broadcast(">> " + currentPlayer.getName() + " plays " + playedCard);
-                    // Register card to the trick
-                    trick.addCard(currentPlayer, playedCard);
-
-                    // Notify Observers (if applicable)
-                    notifyCardPlayed(currentPlayer, playedCard);
-                    playedCards.add(trick.getPlayedCards().get(currentPlayer));
-                    String saveCards = "";
-                    for (int j = 0; j < playedCards.size(); j++) {
-                        if (j != 0) {
-                            saveCards += " | ";
-                        }
-                         saveCards += playedCards.get(j).toVisualString();
-                    }
-                    broadcast("{" + saveCards + "}");
-//                    broadcast(trick.getPlayedCards().values().toString());
-                }
-
+        // Run the 4 turns in order
+        for (int i = 0; i < players.size(); i++) {
+            if (gameController != null && gameController.isAbortRequested()) {
+                throw new GameAbortedException("Game aborted by user.");
             }
-        } catch (Exception e) {
-            System.err.println("Error during trick play in TRICK ENGINE: " + e.getMessage());
+
+            Player currentPlayer = players.get((leadPlayerIndex + i) % players.size());
+            observer.onPlayerThinking(currentPlayer);
+
+            // Ask player for a card
+            Card playedCard = currentPlayer.playCard(gameState);
+
+            // Register card to the trick
+            trick.addCard(currentPlayer, playedCard);
+            observer.onCardPlayed(currentPlayer, playedCard, trick);
         }
 
         // Determine Winner using RuleEngine
         Player winner = RuleEngine.determineTrickWinner(trick, gameState.getHokm());
-//        broadcast("✔️ " + winner.getName() + " won the trick!");
+
+        if (winner.getTeam() == Team.TEAM_A) {
+            gameState.addTrickToTeam1();
+        } else {
+            gameState.addTrickToTeam2();
+        }
 
         // Update GameState History
         gameState.addCardToHistory(new ArrayList<>(trick.getPlayedCards().values()));
+        gameState.setCurrentTrick(null);
 
         // Notify Observers
-        notifyTrickWon(winner);
+        observer.onTrickWon(winner, gameState.getTeam1Tricks(), gameState.getTeam2Tricks());
 
         return winner;
-    }
-
-    // Helper to notify observers (keeps TrickEngine clean)
-    private void notifyCardPlayed(Player p, Card playedCard) {
-        for (Player player : players) {
-            if (player instanceof GameObserver) {
-                ((GameObserver) player).onCardPlayed(p, playedCard);
-            }
-        }
-    }
-
-    private void notifyTrickWon(Player winner) {
-        for (Player player : players) {
-            if (player instanceof GameObserver observer) {
-                observer.onTrickWon(winner);
-            }
-        }
-    }
-
-    private void broadcast(String message) {
-        System.out.println(message);
-        for (Player player : players) {
-            if (player instanceof GameObserver observer) {
-                observer.onMessage(message);
-             }
-        }
     }
 }

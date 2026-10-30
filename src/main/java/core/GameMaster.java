@@ -1,118 +1,89 @@
 package core;
 
 import model.*;
-import player.Player;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 
 public class GameMaster {
+    private static final int TRICKS_TO_WIN_ROUND = 7;
+    private static final int POINTS_TO_WIN_MATCH = 3;
+
     private final List<Player> players;
     private final GameState gameState;
-
     private final Dealer dealer;
     private final TrickEngine trickEngine;
+    private final GameObserver observer;
 
-    private final GameController gameController;
-
-    public GameMaster(List<Player> players, GameState gameState, GameController gameController) {
-        this.players = players;
-        this.gameState = gameState;
-
-        this.dealer = new Dealer();
-        this.trickEngine = new TrickEngine(players, gameController);
-        this.gameController = gameController;
+    public GameMaster(List<Player> players, GameState gameState, GameController gameController, GameObserver observer) {
+        if (players == null || players.size() != 4) {
+            throw new IllegalArgumentException("Exactly 4 players are required.");
+        }
+        this.players = List.copyOf(players);
+        this.gameState = Objects.requireNonNull(gameState, "GameState cannot be null.");
+        this.observer = Objects.requireNonNull(observer, "GameObserver cannot be null.");
+        this.dealer = new Dealer(observer);
+        this.trickEngine = new TrickEngine(players, gameController, observer);
     }
 
     public void playGame() {
-        broadcast("Determining the initial Hakem...");
-        HakemDetermine hakemDetermine = new HakemDetermine(players);
-        Player currentHakem = hakemDetermine.determineHakem();
-
+        Player currentHakem = dealer.determineInitialHakem(players);
         int currentHakemIndex = players.indexOf(currentHakem);
-        while (gameState.getTeam1Score() < 3 && gameState.getTeam2Score() < 3) {
-            System.out.println("\n==================================");
-            broadcast("SCORE: Team 1 [" + gameState.getTeam1Score() + "] - Team 2 [" + gameState.getTeam2Score() + "]");
-            System.out.println("==================================");
 
-            for (Player p : players) {
-                p.resetMemory();
-            }
-
-            broadcast("The Hakem for this round is: " + currentHakem.getName());
+        while (gameState.getTeam1Score() < POINTS_TO_WIN_MATCH && gameState.getTeam2Score() < POINTS_TO_WIN_MATCH) {
+            observer.onRoundStarted(currentHakem, gameState.getTeam1Score(), gameState.getTeam2Score());
 
             dealer.dealCardsAndSetHokm(players, currentHakem, gameState);
-            // 1. Deal cards and set Hokm
-//            dealAndSetHokm(hakem);
 
-            // 2. Play the round
-            boolean team1WonRound = playRound(currentHakem);
+            Team roundWinner = playRound(currentHakem);
+            updateScoreAndNotify(roundWinner, currentHakem.getTeam());
 
-            // 3. Evaluate points and determine next Hakem
-            boolean isHakemTeam1 = isTeam1(currentHakem);
-
-            if (team1WonRound) {
-                gameState.addPointsToTeam1(1);
-                broadcast("🏆 Team 1 reaches 7 trick points and wins the round! (+1 Score)");
-
-                if (!isHakemTeam1) {
-                    currentHakemIndex = (currentHakemIndex + 1) % 4; // Pass Hakem to the right
-                }
-            } else {
-                gameState.addPointsToTeam2(1);
-                broadcast("🏆 Team 2 reaches 7 trick points and wins the round! (+1 Score)");
-                if (isHakemTeam1) {
-                    currentHakemIndex = (currentHakemIndex + 1) % 4; // Pass Hakem to the right
-                }
+            if (roundWinner != currentHakem.getTeam()) {
+                currentHakemIndex = (currentHakemIndex + 1) % players.size();
+                currentHakem = players.get(currentHakemIndex);
             }
 
             gameState.resetRound();
         }
 
-        broadcast("\n🎉 MATCH OVER 🎉");
-        broadcast("FINAL SCORE -> Team 1: " + gameState.getTeam1Score() + " | Team 2: " + gameState.getTeam2Score());
-        if (gameState.getTeam1Score() >= 3) {
-            broadcast("🏅 Team 1 Wins the Match!");
-        } else {
-            broadcast("🏅 Team 2 Wins the Match!");
-        }
+        int winningTeamNum = gameState.getTeam1Score() >= POINTS_TO_WIN_MATCH ? 1 : 2;
+        observer.onMatchEnded(winningTeamNum, gameState.getTeam1Score(), gameState.getTeam2Score());
     }
 
-    private boolean playRound(Player startingLead) {
+    /**
+     * Plays a round of the game until one team wins 7 tricks.
+     *
+     * @param startingLead The player who leads the first trick of the round.
+     * @return The team that won the round.
+     */
+    private Team playRound(Player startingLead) {
         Player currentLead = startingLead;
 
-        while (gameState.getTeam1Tricks() < 7 && gameState.getTeam2Tricks() < 7) {
-            broadcast("\nTrick Points -> Team 1: " + gameState.getTeam1Tricks() + " | Team 2: " + gameState.getTeam2Tricks());
-
-            Player trickWinner = trickEngine.playTrick(gameState, currentLead);
-
-            if (isTeam1(trickWinner)) {
-                gameState.addTrickToTeam1();
-//                broadcast("+1 Trick Point to Team 1");
-            } else {
-                gameState.addTrickToTeam2();
-//                broadcast("+1 Trick Point to Team 2");
-            }
-
-            currentLead = trickWinner; // The winner of the trick leads the next one
+        while (gameState.getTeam1Tricks() < TRICKS_TO_WIN_ROUND && gameState.getTeam2Tricks() < TRICKS_TO_WIN_ROUND) {
+            currentLead = trickEngine.playTrick(gameState, currentLead); // The winner of the trick leads the next one
         }
 
-        return gameState.getTeam1Tricks() == 7;
+        return gameState.getTeam1Tricks() == TRICKS_TO_WIN_ROUND ? Team.TEAM_A : Team.TEAM_B;
     }
 
-    // Helper to identify teams (Player 0 and 2 are Team 1)
-    private boolean isTeam1(Player p) {
-        int index = players.indexOf(p);
-        return index == 0 || index == 2;
-    }
-
-    private void broadcast(String message) {
-        System.out.println(message);
-        for (Player player : players) {
-            if (player instanceof GameObserver observer) {
-                observer.onMessage(message);
-            }
+    private void updateScoreAndNotify(Team roundWinner, Team hakemTeam) {
+        int losingTeamTricks = (roundWinner == Team.TEAM_A)
+                ? gameState.getTeam2Tricks()
+                : gameState.getTeam1Tricks();
+        int pointsAwarded = 1;
+        if (losingTeamTricks == 0) {
+            pointsAwarded = (roundWinner == hakemTeam) ? 2 : 3;
         }
+
+        int winningTeamNum;
+        if (roundWinner == Team.TEAM_A) {
+            gameState.addPointsToTeam1(pointsAwarded);
+            winningTeamNum = 1;
+        } else {
+            gameState.addPointsToTeam2(pointsAwarded);
+            winningTeamNum = 2;
+        }
+
+        observer.onRoundEnded(winningTeamNum, gameState.getTeam1Score(), gameState.getTeam2Score());
     }
 }

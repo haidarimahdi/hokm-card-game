@@ -3,7 +3,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import player.DummyAIPlayer;
-import player.Player;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,10 +23,10 @@ public class DealingPhaseTest {
         gameState = new GameState();
 
         players = new ArrayList<>();
-        players.add(new DummyAIPlayer("Player 1"));
-        players.add(new DummyAIPlayer("Player 2"));
-        players.add(new DummyAIPlayer("Player 3"));
-        players.add(new DummyAIPlayer("Player 4"));
+        players.add((Player) new DummyAIPlayer("Player 1"));
+        players.add((Player) new DummyAIPlayer("Player 2"));
+        players.add((Player) new DummyAIPlayer("Player 3"));
+        players.add((Player) new DummyAIPlayer("Player 4"));
     }
 
     @Test

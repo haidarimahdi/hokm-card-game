@@ -2,27 +2,28 @@ package ai;
 
 import model.Card;
 import model.GameState;
-import player.Player;
+import model.Player;
 
 import java.util.List;
 
 public class System2LlmEngine implements CognitiveEngine {
     private final AiClient aiClient;
-    private final String memory;
+    private final AiMemoryTracker memoryTracker;
 
-    public System2LlmEngine(AiClient aiClient, String memory) {
+    public System2LlmEngine(AiClient aiClient, AiMemoryTracker memoryTracker) {
         this.aiClient = aiClient;
-        this.memory = memory;
+        this.memoryTracker = memoryTracker;
     }
 
     @Override
     public Card decide(GameState state, List<Card> validCards, Player self) {
-        System.out.println("🧠 [System 2]: Activating Deep LLM Reasoning...");
-
-        String team = self.getName().substring(self.getName().indexOf("(") + 1, self.getName().indexOf(")"));
-
         try {
-            String prompt = HokmPromptBuilder.buildTurnPrompt(self.getName(), team, state, validCards, memory);
+            String prompt = HokmPromptBuilder.buildTurnPrompt(
+                    self,
+                    state,
+                    validCards,
+                    memoryTracker
+            );
 
             String jsonResponse = aiClient.askLlm(prompt);
             return AiResponseParser.parseDecision(jsonResponse, validCards);

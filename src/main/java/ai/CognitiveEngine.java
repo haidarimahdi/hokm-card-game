@@ -2,7 +2,7 @@ package ai;
 
 import model.Card;
 import model.GameState;
-import player.Player;
+import model.Player;
 
 import java.util.List;
 

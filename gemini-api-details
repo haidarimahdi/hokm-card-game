@@ -1,3 +1,0 @@
-export GCP_PROJECT_ID="gemini-tdd-agent-prod"
-export GCP_LOCATION="europe-west3"
-export GEMINI_MODEL="gemini-2.5-flash"

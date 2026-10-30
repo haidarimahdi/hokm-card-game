@@ -1,6 +1,7 @@
 package model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class GameState {
@@ -63,7 +64,7 @@ public class GameState {
     public int getTeam2Score() { return team2Score; }
 
     public List<Card> getPlayedCardsHistory() {
-        return playedCardsHistory;
+        return Collections.unmodifiableList(playedCardsHistory);
     }
 
     public void addCardToHistory(List<Card> cards) {

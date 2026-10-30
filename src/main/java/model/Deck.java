@@ -10,7 +10,7 @@ public class Deck {
     public Deck() {
         for (CardSuit suit : CardSuit.values()) {
             for (CardValue value : CardValue.values()) {
-                cards.add(new Card(value, suit, value.ordinal() + 1));
+                cards.add(new Card(suit, value));
             }
         }
     }
@@ -23,13 +23,16 @@ public class Deck {
         return cards.size();
     }
 
+    public boolean isEmpty() {
+        return cards.isEmpty();
+    }
     public List<Card> dealCards(int numberOfCards) {
         if (numberOfCards > cards.size()) {
             throw new IllegalArgumentException("Not enough cards in the deck to deal " + numberOfCards + " cards.");
         }
-        List<Card> dealCards = new ArrayList<>(cards.subList(0, numberOfCards));
+        List<Card> dealtCards = new ArrayList<>(cards.subList(0, numberOfCards));
         cards.subList(0, numberOfCards).clear();
-        return dealCards;
+        return dealtCards;
 
     }
 }

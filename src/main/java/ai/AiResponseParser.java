@@ -1,77 +1,52 @@
 package ai;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import model.Card;
+import model.CardSuit;
+import model.CardValue;
+
 import java.util.List;
 
 public class AiResponseParser {
+    private static final Gson GSON = new Gson();
+
+    private record LlmCardPayload(CardSuit suit, CardValue value) {}
 
     public static Card parseDecision(String jsonResponse, List<Card> validCards) {
-        if (jsonResponse == null || jsonResponse.isEmpty()) return null;
-
-        // Clean markdown backticks if present
-        if (jsonResponse.startsWith("```")) {
-            jsonResponse = jsonResponse.replace("```json", "").replace("```", "").trim();
-        }
-
-        // We use your fast extractJsonValue approach (or you can use Jackson/Gson here later)
-        String suit = extractJsonValue(jsonResponse, "suit");
-        String value = extractJsonValue(jsonResponse, "value");
-
-        if (suit.isEmpty() || value.isEmpty()) return null;
-
-        System.out.println("   ⚡ [Decision]: Agent chose to play " + value + " of " + suit);
-
-        // Match against valid cards
-        return matchCard(suit, value, validCards);
-    }
-
-    public static model.CardSuit parseHokmDecision(String jsonResponse) {
-        if (jsonResponse == null || jsonResponse.isEmpty()) return null;
-
-        if (jsonResponse.startsWith("```")) {
-            jsonResponse = jsonResponse.replace("```json", "").replace("```", "").trim();
-        }
-
-        String suitStr = extractJsonValue(jsonResponse, "suit");
-        if (suitStr.isEmpty()) return null;
-
-        System.out.println("   ⚡ [Decision]: Agent chose " + suitStr.toUpperCase() + " as the Hokm.");
-
-        try {
-            return model.CardSuit.valueOf(suitStr.toUpperCase());
-        } catch (IllegalArgumentException e) {
+        LlmCardPayload payload = parseJson(jsonResponse);
+        if (payload == null || payload.suit() == null || payload.value() == null) {
             return null;
         }
-    }
 
-    private static Card matchCard(String suit, String value, List<Card> validCards) {
-        String cleanSuit = suit.trim().toUpperCase();
-        String cleanValue = value.trim().toUpperCase();
-
-        for (Card c : validCards) {
-            if (c.suit().name().equals(cleanSuit) && c.value().name().equals(cleanValue)) {
-                return c;
-            }
+        Card requested = new Card(payload.suit(), payload.value());
+        if (validCards.contains(requested)) {
+            System.out.println("     [System 2 Decision]: " + requested);
+            return requested;
         }
+
+        System.err.println("⚠️ LLM chose a card not in validMoves: " + requested);
         return null;
     }
 
-    private static String extractJsonValue(String json, String key) {
-        String searchKey = "\"" + key + "\":";
-        int startIndex = json.indexOf(searchKey);
-        if (startIndex == -1) {
-            // Fallback for unquoted keys or formatting quirks
-            searchKey = "\"" + key + "\" :";
-            startIndex = json.indexOf(searchKey);
-            if(startIndex == -1) return "";
+    public static CardSuit parseHokmDecision(String jsonResponse) {
+        LlmCardPayload payload = parseJson(jsonResponse);
+        if (payload == null || payload.suit() == null) {
+            return null;
         }
+        System.out.println("     [System 2 Hokm Decision]: " + payload.suit());
+        return payload.suit();
+    }
 
-        startIndex += searchKey.length();
-        int quoteStart = json.indexOf("\"", startIndex);
-        int quoteEnd = json.indexOf("\"", quoteStart + 1);
-
-        if(quoteStart == -1 || quoteEnd == -1) return "";
-
-        return json.substring(quoteStart + 1, quoteEnd);
+    private static LlmCardPayload parseJson(String jsonResponse) {
+        if (jsonResponse == null || jsonResponse.isBlank()) {
+            return null;
+        }
+        try {
+            return GSON.fromJson(jsonResponse.trim(), LlmCardPayload.class);
+        } catch (JsonSyntaxException e) {
+            System.err.println("Failed to parse LLM JSON (" + jsonResponse + "): " + e.getMessage());
+            return null;
+        }
     }
 }

@@ -3,7 +3,7 @@ package core;
 import model.Card;
 import model.CardSuit;
 import model.Trick;
-import player.Player;
+import model.Player;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,20 +27,6 @@ public class RuleEngine {
         }
 
         return hasLeadSuit ? validCards : new ArrayList<>(hand);
-    }
-
-    public static boolean isValidMove(Card playedCard, List<Card> hand, CardSuit leadSuit) {
-        if (leadSuit == null || playedCard.suit() == leadSuit) {
-            return true;
-        }
-
-        for (Card card : hand) {
-            if (card.suit() == leadSuit) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
 public static Player determineTrickWinner(Trick trick, CardSuit hokm) {
@@ -76,5 +62,17 @@ public static Player determineTrickWinner(Trick trick, CardSuit hokm) {
         return winner;
     }
 
-
+//    public static boolean isValidMove(Card playedCard, List<Card> hand, CardSuit leadSuit) {
+//        if (leadSuit == null || playedCard.suit() == leadSuit) {
+//            return true;
+//        }
+//
+//        for (Card card : hand) {
+//            if (card.suit() == leadSuit) {
+//                return false;
+//            }
+//        }
+//
+//        return true;
+//    }
 }
