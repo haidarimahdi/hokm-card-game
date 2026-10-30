@@ -1,6 +1,7 @@
 package ui.telegram;
 
 import ai.AiClient;
+import ai.AiMemoryTracker;
 import core.GameAbortedException;
 import core.GameController;
 import core.GameEventBus;
@@ -17,23 +18,22 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class TelegramGameSession implements GameController {
     private final HokmBot bot;
+    private final Long chatId;
     private final AiClient aiClient;
     private final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>();
 
-    private volatile Long activeChatId;
+//    private volatile Long activeChatId;
     private volatile boolean gameRunning = false;
     private volatile boolean abortRequested = false;
     private volatile boolean restartPending = false;
 
-    public TelegramGameSession(HokmBot bot, AiClient aiClient) {
+    public TelegramGameSession(HokmBot bot, Long chatId, AiClient aiClient) {
         this.bot = bot;
+        this.chatId = chatId;
         this.aiClient = aiClient;
-        this.bot.setUpdateHandler(this::onTelegramInput);
     }
 
-    private void onTelegramInput(Long chatId, String input) {
-        this.activeChatId = chatId;
-
+    public void onTelegramInput(String input) {
         switch (input.toLowerCase()) {
             case "/start" -> {
                 if (gameRunning) {
@@ -62,6 +62,8 @@ public class TelegramGameSession implements GameController {
             default -> {
                 if (gameRunning) {
                     inputQueue.offer(input);
+                } else {
+                    bot.sendText(chatId, "Type /start to begin a new match.");
                 }
             }
         }
@@ -77,16 +79,16 @@ public class TelegramGameSession implements GameController {
             abortRequested = false;
             gameRunning = true;
             inputQueue.clear();
+            bot.sendText(chatId, "🃏 Dealing cards. Get ready!");
 
-            bot.sendText(activeChatId, "🃏 Dealing cards. Get ready!");
             try {
                 runSingleMatch();
-                bot.sendText(activeChatId, "🎉 Match finished! Type /start to play again.");
+                bot.sendText(chatId, "🏁 Match finished! Type /start to play again.");
             } catch (GameAbortedException e) {
-                bot.sendText(activeChatId, "🛑 Game aborted.");
+                bot.sendText(chatId, "🛑 Game aborted.");
             } catch (Exception e) {
                 e.printStackTrace();
-                bot.sendText(activeChatId, "⚠️ A critical error stopped the match.");
+                bot.sendText(chatId, "❌ A critical error stopped the match.");
             } finally {
                 gameRunning = false;
                 if (restartPending) {
@@ -99,15 +101,16 @@ public class TelegramGameSession implements GameController {
 
     private void runSingleMatch() {
         GameEventBus eventBus = new GameEventBus();
-        eventBus.register(new TelegramGameObserver(bot, activeChatId));
-
-        // Also mirror all events to the server console for debugging purposes
+        eventBus.register(new TelegramGameObserver(bot, chatId));
         eventBus.register(new ConsoleGameObserver());
 
+        AiMemoryTracker sharedTracker = new AiMemoryTracker();
+        eventBus.register(sharedTracker);
+
         Player human = new TelegramHumanPlayer("You", Team.TEAM_A, bot, this);
-        AiPlayer bot1 = new AiPlayer("Bot 1", Team.TEAM_B, aiClient, eventBus);
-        AiPlayer bot2 = new AiPlayer("Bot 2", Team.TEAM_A, aiClient, eventBus);
-        AiPlayer bot3 = new AiPlayer("Bot 3", Team.TEAM_B, aiClient, eventBus);
+        AiPlayer bot1 = new AiPlayer("Bot 1", Team.TEAM_B, aiClient, sharedTracker);
+        AiPlayer bot2 = new AiPlayer("Bot 2", Team.TEAM_A, aiClient, sharedTracker);
+        AiPlayer bot3 = new AiPlayer("Bot 3", Team.TEAM_B, aiClient, sharedTracker);
 
         List<Player> players = List.of(human, bot1, bot2, bot3);
         GameMaster master = new GameMaster(players, new GameState(), this, eventBus);
@@ -127,8 +130,8 @@ public class TelegramGameSession implements GameController {
         }
     }
 
-    public Long getActiveChatId() {
-        return activeChatId;
+    public Long getChatId() {
+        return chatId;
     }
 
     @Override

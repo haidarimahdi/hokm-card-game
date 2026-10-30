@@ -42,7 +42,7 @@ public class GameState {
     }
 
     public Trick getCurrentTrick() {
-        return currentTrick;
+        return currentTrick != null ? currentTrick.asReadOnly() : null;
     }
 
     public void setCurrentTrick(Trick currentTrick) {

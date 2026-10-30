@@ -27,12 +27,13 @@ public class Deck {
         return cards.isEmpty();
     }
     public List<Card> dealCards(int numberOfCards) {
-        if (numberOfCards > cards.size()) {
+        if (numberOfCards < 0 || numberOfCards > cards.size()) {
             throw new IllegalArgumentException("Not enough cards in the deck to deal " + numberOfCards + " cards.");
         }
-        List<Card> dealtCards = new ArrayList<>(cards.subList(0, numberOfCards));
-        cards.subList(0, numberOfCards).clear();
+        int fromIndex = cards.size() - numberOfCards;
+        List<Card> TailSlice = cards.subList(fromIndex, cards.size());
+        List<Card> dealtCards = new ArrayList<>(TailSlice);
+        TailSlice.clear(); // Remove the dealt cards from the deck
         return dealtCards;
-
     }
 }

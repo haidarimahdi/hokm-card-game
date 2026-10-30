@@ -28,13 +28,14 @@ public class System1ReflexEngine implements CognitiveEngine {
         Player currentWinner = RuleEngine.determineTrickWinner(state.getCurrentTrick(), state.getHokm());
         boolean partnerIsWinning = currentWinner.getTeam() == self.getTeam();
 
-            // If my partner is winning the trick right now...
-            if (partnerIsWinning) {
-                return handlePartnerWinning(state, currentTrick, validCards);
-            }
-            if (cardsOnTable == 3) {
-                return handleFourthPlayerOpponentWinning(state, currentTrick, validCards, self);
-            }
+        // If my partner is winning the trick right now...
+        if (partnerIsWinning) {
+            return handlePartnerWinning(state, currentTrick, validCards);
+        }
+        if (cardsOnTable == 3) {
+            Card currentBestCard = currentTrick.getPlayedCards().get(currentWinner);
+            return handleFourthPlayerOpponentWinning(state, currentTrick, validCards, currentBestCard);
+        }
         return null;
     }
 
@@ -63,33 +64,29 @@ public class System1ReflexEngine implements CognitiveEngine {
         return getLowestValueCard(validCards);
     }
     private Card handleFourthPlayerOpponentWinning(
-            GameState state, Trick currentTrick, List<Card> validCards, Player self) {
+            GameState state, Trick currentTrick, List<Card> validCards, Card currentBestCard) {
+
+        CardSuit leadSuit = currentTrick.getLeadSuit();
+        CardSuit hokm = state.getHokm();
 
         List<Card> winningOptions = validCards.stream()
-                .filter(candidate -> wouldWinTrick(currentTrick, state.getHokm(), self, candidate))
+                .filter(candidate -> RuleEngine.beats(candidate, currentBestCard, leadSuit, hokm))
                 .toList();
 
         if (!winningOptions.isEmpty()) {
             // Win as cheaply as possible (prefer non-Hokm winners before Hokm cuts if tied in rank)
             return winningOptions.stream()
-                    .min(Comparator.comparing((Card c) -> c.suit() == state.getHokm())
+                    .min(Comparator.comparing((Card c) -> c.suit() == hokm)
                             .thenComparingInt(Card::rank))
                     .orElseThrow();
         }
 
         // Cannot beat opponent: surrender with lowest value card (preferring non-Hokm)
         List<Card> nonHokms = validCards.stream()
-                .filter(c -> c.suit() != state.getHokm())
+                .filter(c -> c.suit() != hokm)
                 .toList();
 
         return getLowestValueCard(nonHokms.isEmpty() ? validCards : nonHokms);
-    }
-
-    private boolean wouldWinTrick(Trick currentTrick, CardSuit hokm, Player self, Card candidate) {
-        Trick simulated = new Trick();
-        currentTrick.getPlayedCards().forEach(simulated::addCard);
-        simulated.addCard(self, candidate);
-        return RuleEngine.determineTrickWinner(simulated, hokm) == self;
     }
 
     private Card findOffTrumpAce(List<Card> validCards, CardSuit leadSuit, CardSuit hokm) {

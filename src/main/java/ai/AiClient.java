@@ -90,6 +90,7 @@ public class AiClient implements AutoCloseable {
                     GoogleCredentials creds = GoogleCredentials.fromStream(fis);
                     creds.refreshIfExpired();
                     System.out.println("Loaded Google Cloud credentials from default path: " + defaultAdcPath);
+                    return creds;
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to read credentials from " + defaultAdcPath, e);
                 }

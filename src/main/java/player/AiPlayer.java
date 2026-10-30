@@ -12,6 +12,29 @@ public class AiPlayer extends BasePlayer {
     private final AiClient aiClient;
     private final List<CognitiveEngine> brains;
 
+    /**
+     * Constructor for AiPlayer that uses a shared AiMemoryTracker.
+     * Accepts a shared AiMemoryTracker registered once on the GameEventBus.
+     * @param name                  The name of the player.
+     * @param team                  The team of the player.
+     * @param aiClient              The AI client to use.
+     * @param sharedMemoryTracker   The shared memory tracker.
+     */
+    public AiPlayer(String name, Team team, AiClient aiClient, AiMemoryTracker sharedMemoryTracker) {
+        super(name, team);
+        this.aiClient = Objects.requireNonNull(aiClient, "AiClient cannot be null");
+        Objects.requireNonNull(sharedMemoryTracker, "AiMemoryTracker cannot be null");
+        this.brains = List.of(new System1ReflexEngine(), new System2LlmEngine(aiClient, sharedMemoryTracker));
+    }
+
+    /**
+     * Constructor for AiPlayer that registers a new AiMemoryTracker with the provided GameEventBus.
+     * Legacy convenience constructor for backward compatibility.
+     * @param name      The name of the player.
+     * @param team      The team of the player.
+     * @param aiClient  The AI client to use.
+     * @param eventBus  The event bus to register the memory tracker with.
+     */
     public AiPlayer(String name, Team team, AiClient aiClient, GameEventBus eventBus) {
         super(name, team);
         this.aiClient = aiClient;

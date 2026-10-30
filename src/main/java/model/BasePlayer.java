@@ -1,13 +1,17 @@
 package model;
 
+import com.sun.source.tree.Tree;
 import core.RuleEngine;
 
 import java.util.*;
 
 public abstract class BasePlayer implements Player {
+    private static final Comparator<Card> HAND_SORT_ORDER = Comparator.comparing(Card::suit)
+            .thenComparing(Card::value, Comparator.reverseOrder());
+
     private final String name;
     private final Team team;
-    private final List<Card> hand = new ArrayList<>();
+    private final NavigableSet<Card> hand = new TreeSet<>(HAND_SORT_ORDER);
 
     protected BasePlayer(String name, Team team) {
         if (name == null || name.isEmpty()) {
@@ -33,16 +37,13 @@ public abstract class BasePlayer implements Player {
 
     @Override
     public final List<Card> getHand() {
-        return Collections.unmodifiableList(hand);
+        return List.copyOf(hand);
     }
 
     @Override
     public final void receiveCards(List<Card> cards) {
         Objects.requireNonNull(cards, "Cards cannot be null.");
         hand.addAll(cards);
-        // Sort by suit, then descending by value (Ace to Two)
-        hand.sort(Comparator.comparing(Card::suit)
-                .thenComparing(Card::value, Comparator.reverseOrder()));
     }
 
     @Override
@@ -53,11 +54,13 @@ public abstract class BasePlayer implements Player {
     @Override
     public final Card playCard(GameState state) {
         Objects.requireNonNull(state, "Game state cannot be null.");
+
         CardSuit leadSuit = state.getCurrentTrick() != null ? state.getCurrentTrick().getLeadSuit() : null;
-        List<Card> validCards = RuleEngine.getValidMoves(hand, leadSuit);
+
+        List<Card> currentHand = getHand();
+        List<Card> validCards = RuleEngine.getValidMoves(currentHand, leadSuit);
 
         Card chosenCard = selectCard(state, validCards);
-
         if (chosenCard == null || !validCards.contains(chosenCard)) {
             System.err.println("⚠️ Illegal or null move by " + name + " (" + chosenCard + "). Forcing first valid card.");
             chosenCard = validCards.getFirst();
@@ -67,6 +70,7 @@ public abstract class BasePlayer implements Player {
         return chosenCard;
     }
 
+    @Override
     public abstract CardSuit chooseHokm(List<Card> firstFiveCards);
 
     protected abstract Card selectCard(GameState state, List<Card> validCards);

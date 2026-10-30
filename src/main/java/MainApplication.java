@@ -11,6 +11,7 @@ import player.AiPlayer;
 import ui.ConsoleGameObserver;
 import ui.telegram.HokmBot;
 import ui.telegram.TelegramGameSession;
+import ui.telegram.TelegramSessionManager;
 
 import java.util.List;
 
@@ -107,15 +108,19 @@ public class MainApplication {
      * ==========================================
      */
     private static void runTelegramMode() throws Exception {
-        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-        HokmBot bot = new HokmBot(TELEGRAM_BOT_USERNAME, TELEGRAM_BOT_TOKEN);
-        botsApi.registerBot(bot);
 
-        System.out.println("📡 Server Online. Listening for Telegram commands...");
 
         try (AiClient aiClient = new AiClient(PROJECT_ID, LOCATION, MODEL_NAME)) {
-            TelegramGameSession session = new TelegramGameSession(bot, aiClient);
-            session.startSessionLoop();
+            TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
+            HokmBot bot = new HokmBot(TELEGRAM_BOT_USERNAME, TELEGRAM_BOT_TOKEN);
+
+            TelegramSessionManager sessionManager = new TelegramSessionManager(bot, aiClient);
+            bot.setUpdateHandler(sessionManager::handleUpdate);
+
+            botsApi.registerBot(bot);
+            System.out.println("📡 Server Online. Listening for Telegram commands from multiple users...");
+
+            new java.util.concurrent.CountDownLatch(1).await(); // Keep the main thread alive indefinitely
         }
     }
 

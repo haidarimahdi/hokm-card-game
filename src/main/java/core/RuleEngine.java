@@ -17,19 +17,29 @@ public class RuleEngine {
         }
 
         List<Card> validCards = new ArrayList<>();
-        boolean hasLeadSuit = false;
-
         for (Card card : hand) {
             if (card.suit() == leadSuit) {
                 validCards.add(card);
-                hasLeadSuit = true;
             }
         }
 
-        return hasLeadSuit ? validCards : new ArrayList<>(hand);
+        return !validCards.isEmpty() ? validCards : new ArrayList<>(hand);
     }
 
-public static Player determineTrickWinner(Trick trick, CardSuit hokm) {
+    public static boolean beats(Card challenger, Card currentBest, CardSuit leadSuit, CardSuit hokm) {
+        boolean challengerIsHokm = challenger.suit() == hokm;
+        boolean bestIsHokm = currentBest.suit() == hokm;
+
+        if (challengerIsHokm) {
+            return !bestIsHokm || challenger.rank() > currentBest.rank();
+        }
+        if (bestIsHokm) {
+            return false;
+        }
+        return challenger.suit() == leadSuit && challenger.rank() > currentBest.rank();
+    }
+
+    public static Player determineTrickWinner(Trick trick, CardSuit hokm) {
         CardSuit leadSuit = trick.getLeadSuit();
         Player winner = null;
         Card winningCard = null;
@@ -38,27 +48,11 @@ public static Player determineTrickWinner(Trick trick, CardSuit hokm) {
             Player player = entry.getKey();
             Card card = entry.getValue();
 
-            if (winningCard == null) {
-                winner = player;
-                winningCard = card;
-                continue;
-            }
-
-            boolean cardIsHokm = card.suit() == hokm;
-            boolean winningCardIsHokm = winningCard.suit() == hokm;
-            boolean cardFollowsLead = card.suit() == leadSuit;
-
-            if (cardIsHokm) {
-                if (!winningCardIsHokm || card.rank() > winningCard.rank()) {
-                    winner = player;
-                    winningCard = card;
-                }
-            } else if (!winningCardIsHokm && cardFollowsLead && card.rank() > winningCard.rank()) {
+            if (winningCard == null || beats(card, winningCard, leadSuit, hokm)) {
                 winner = player;
                 winningCard = card;
             }
         }
-
         return winner;
     }
 

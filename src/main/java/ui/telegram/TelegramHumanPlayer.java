@@ -30,12 +30,13 @@ public class TelegramHumanPlayer extends BasePlayer {
         }
 
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup(List.of(row));
+
         String cardsDisplay = firstFiveCards.stream()
                 .map(Card::toVisualString)
                 .collect(Collectors.joining(" "));
 
         String prompt = "👑 You are Hakem! Your first 5 cards:\n" + cardsDisplay + "\n\nTap a button to set the Hokm:";
-        bot.sendTextWithKeyboard(session.getActiveChatId(), prompt, markup);
+        bot.sendTextWithKeyboard(session.getChatId(), prompt, markup);
 
         while (true) {
             String input = session.waitForUserInput(); // Automatically throws GameAbortedException on /end or /restart
@@ -51,17 +52,17 @@ public class TelegramHumanPlayer extends BasePlayer {
     protected Card selectCard(GameState state, List<Card> validCards) {
         InlineKeyboardMarkup markup = buildHandKeyboard(validCards);
         String prompt = "Your turn! Hokm is " + state.getHokm().getSymbol() + "\nTap a valid card to play:";
-        bot.sendTextWithKeyboard(session.getActiveChatId(), prompt, markup);
+        bot.sendTextWithKeyboard(session.getChatId(), prompt, markup);
 
         while (true) {
             String input = session.waitForUserInput();
             if (input.startsWith("PLAY_")) {
                 Card chosen = parseCardCallback(input);
                 if (chosen != null && validCards.contains(chosen)) {
-                    bot.sendText(session.getActiveChatId(), "You played: " + chosen.toVisualString());
+                    bot.sendText(session.getChatId(), "You played: " + chosen.toVisualString());
                     return chosen; // BasePlayer.playCard() automatically removes this card from the hand
                 }
-                bot.sendText(session.getActiveChatId(), "⚠️ Invalid move! You must follow the lead suit.");
+                bot.sendText(session.getChatId(), "⚠️ Invalid move! You must follow the lead suit.");
             }
         }
     }
