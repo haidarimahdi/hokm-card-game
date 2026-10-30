@@ -33,8 +33,6 @@ public class GameState {
         this.team2Score = team2Score;
     }
 
-
-
     public CardSuit getHokm() {
         return hokm;
     }

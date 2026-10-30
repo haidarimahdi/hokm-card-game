@@ -23,10 +23,10 @@ public class DealingPhaseTest {
         gameState = new GameState();
 
         players = new ArrayList<>();
-        players.add((Player) new DummyAIPlayer("Player 1"));
-        players.add((Player) new DummyAIPlayer("Player 2"));
-        players.add((Player) new DummyAIPlayer("Player 3"));
-        players.add((Player) new DummyAIPlayer("Player 4"));
+        players.add(new DummyAIPlayer("Player 1"));
+        players.add(new DummyAIPlayer("Player 2"));
+        players.add(new DummyAIPlayer("Player 3"));
+        players.add(new DummyAIPlayer("Player 4"));
     }
 
     @Test
@@ -78,11 +78,11 @@ public class DealingPhaseTest {
     public void testHakemChoosesHokm() {
         Player hakem = players.getFirst();
         List<Card> hakemFirstFive = List.of(
-                new Card(CardValue.TEN, CardSuit.CLUBS, 10),
-                new Card(CardValue.ACE, CardSuit.SPADES, 13),
-                new Card(CardValue.KING, CardSuit.CLUBS, 12),
-                new Card(CardValue.QUEEN, CardSuit.DIAMONDS, 11),
-                new Card(CardValue.NINE, CardSuit.HEARTS, 9)
+                new Card(CardValue.TEN, CardSuit.CLUBS),
+                new Card(CardValue.ACE, CardSuit.SPADES),
+                new Card(CardValue.KING, CardSuit.CLUBS),
+                new Card(CardValue.QUEEN, CardSuit.DIAMONDS),
+                new Card(CardValue.NINE, CardSuit.HEARTS)
         );
         CardSuit chosenHokm = hakem.chooseHokm(hakemFirstFive);
         assertEquals(CardSuit.CLUBS, chosenHokm, "Hakem should choose HEARTS");
